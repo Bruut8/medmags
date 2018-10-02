@@ -1,0 +1,29 @@
+[Feeds]
+Feed1=https://jamanetwork.com/rss/site_18/74.xml
+Feed2=https://onlinelibrary.wiley.com/action/showFeed?jc=15314995&type=etoc&feed=rss
+Feed3=https://onlinelibrary.wiley.com/action/showFeed?jc=10970347&type=etoc&feed=rss
+Feed4=https://onlinelibrary.wiley.com/action/showFeed?jc=17494486&type=etoc&feed=rss
+Feed5=http://ovidsp.ovid.com/rss/journals/00129492/current.rss
+Feed6=https://eutils.ncbi.nlm.nih.gov/entrez/eutils/erss.cgi?rss_guid=1TCb4A3LOGb0sKASh7Kca6bOge2Dpsp2NdYPppQYRcL36Tust-
+
+[Name]
+Feed1=JAMA Otolaryn., Head and Neck Surg.
+Feed2=Laryngoscope
+Feed3=Head and Neck
+Feed4=Clinical Otolaryngology
+Feed5=Otology Neurotology
+Feed6=NTVG via Pubmed
+
+xml := getwebcontent(feedurl)
+
+getwebcontent(url)
+{
+	temp := "I:\DIVERSE\Autohotkey\Dashboard\RSS\temp.tmp"
+	IfExist, %temp%
+		FileDelete, %temp%
+	URLDownloadToFile,%url%, %temp%
+	FileRead, temp, %temp%
+	FileDelete, %temp%
+	return temp
+}
+
