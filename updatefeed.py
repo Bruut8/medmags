@@ -12,12 +12,13 @@ import MySQLdb
 
 #vars
 feeds = [
-	{'name': 'Otology_Neurotology', 'feed': 'http://ovidsp.ovid.com/rss/journals/00129492/current.rss'}
+	#{'name': 'Otology_Neurotology', 'feed': 'http://ovidsp.ovid.com/rss/journals/00129492/current.rss'}
+	{'name': 'Laryngoscope', 'feed': 'http://onlinelibrary.wiley.com/action/showFeed?jc=15314995&type=etoc&feed=rss'}
 ]
 NAMESPACES = {
 	'rss': 'http://purl.org/rss/1.0/',
 	'rdf': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
-	'prism': 'http://prismstandard.org/namespaces/basic/2.0',
+	'prism': 'http://prismlibrary.com',
 	'dc': 'http://purl.org/dc/elements/1.1/'
 }
 proxy = '' 
@@ -31,10 +32,10 @@ def getwebcontent(url):
 	return resp
 
 def getredirect(url):
-	print('  Attemping to get redirect page..')
+	#print('  Attemping to get redirect page..')
 	resp = urllib.request.urlopen(url)
 	red = resp.geturl()
-	print('  Result: ' + red)
+	#print('  Result: ' + red)
 	return red
 
 def loadxml(xml):
@@ -60,15 +61,17 @@ def parsexml(xml, name, feed):
 	print('  Succes!')
 	if 'ovidsp.ovid.com' in feed:
 		parseovid(xml, name)
+	elif 'wiley.com' in feed:
+		parsewiley(xml, name)
 	return
 
-def parseovid(xml, name):
-	xdoc = loadxml(xml)
+def parsewiley(xml, name):
 	pmidlist = []
-	print(' Identified OVID-type feed, pubmed title search required..')
-	for i in xdoc.xpath('//channel/item'):
-		at = cleanxml(str(i.xpath('title/text()')[0]))
-		pmid = pmtitlesearch(at)
+	print(' Identified Wiley-type feed, pubmed doi search required..')
+	xdoc = loadxml(xml)
+	for i in xdoc.xpath('//rdf:RDF/rss:item', namespaces=NAMESPACES):
+		doi = re.sub(r'doi:', '', str(i.xpath('dc:identifier/text()', namespaces=NAMESPACES)[0]))
+		pmid = pmtermsearch(doi, 'doi')
 		if pmid == 0:
 			print('  Skipping entry..')
 		else:
@@ -79,10 +82,27 @@ def parseovid(xml, name):
 		print(' No PMID\'s found in entire feed. Feed correct?')
 	return
 
-def pmtitlesearch(title):
-	print(' Searching PubMed by title: ' + title)
-	term = re.sub(r'\s', '+', title)
-	url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=' + term + '&retmode=xml&field=title&reldate=300'
+def parseovid(xml, name):
+	xdoc = loadxml(xml)
+	pmidlist = []
+	print(' Identified OVID-type feed, pubmed title search required..')
+	for i in xdoc.xpath('//channel/item'):
+		at = cleanxml(str(i.xpath('title/text()')[0]))
+		pmid = pmtermsearch(at, 'title')
+		if pmid == 0:
+			print('  Skipping entry..')
+		else:
+			pmidlist.append(pmid)
+	if len(pmidlist) > 0:
+		pmidtodb(pmidlist, name)
+	else:
+		print(' No PMID\'s found in entire feed. Feed correct?')
+	return
+
+def pmtermsearch(term, type):
+	print(' Searching PubMed by ' + type + ': ' + term)
+	term = re.sub(r'\s', '+', term)
+	url = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=' + term + '&retmode=xml&field=' + type + '&reldate=300'
 	xml = getwebcontent(url)
 	xdoc = loadxml(xml)
 	count = int(xdoc.xpath('//eSearchResult/Count/text()')[0])
@@ -125,9 +145,15 @@ def pmidtodb(pmidlist, dbname):
 		if 'Insights.ovid.com' in doired:
 			#ovid weblink
 			an = re.search(r'an=(.*)', doired)
-			pdflink = 'http://ovidsp.ovid.com/ovidweb.cgi?T=JS&CSC=Y&NEWS=N&PAGE=fulltext&AN=' + an.group(1) + '&LSLINK=80&D=ovft&CHANNEL=PubMed&PDF=y' 
+			# pdflink = 'http://ovidsp.ovid.com/ovidweb.cgi?T=JS&CSC=Y&NEWS=N&PAGE=fulltext&AN=' + an.group(1) + '&LSLINK=80&D=ovft&CHANNEL=PubMed&PDF=y' 
+			# Radboud:
+			pdflink = 'http://ovidsp.tx.ovid.com.ru.idm.oclc.org/sp-3.31.1a/ovidweb.cgi?T=JS&CSC=Y&NEWS=N&PAGE=fulltext&AN=' + an.group(1) + '&LSLINK=80&D=ovft&CHANNEL=PubMed&PDF=y'
+		elif 'wiley.com' in doired:
+			#wiley weblink
+			pdflink = 'https://onlinelibrary-wiley-com.ru.idm.oclc.org/doi/epdf/' + doi
 		else:
 			pdflink = 0
+			print(' Geen PDF link kunne verkrijgen!')
 		print(' Adding ' + pmid + ' to database...')
 		#sql_cmd = 'INSERT INTO ' + dbname + 'VALUES(' + title + ',' + authors + ',' + pmid + ',' + doi + ',' + volume + ',' + issue + ',' + pubdate + ',' + pubtype + ',' + abstract + ',' + pdflink + ')'
 		try:
@@ -160,5 +186,8 @@ for dict in feeds:
 	xml = getwebcontent(dict['feed'])
 	parsexml(xml, dict['name'], dict['feed'])
 
+cur.close()
+db.commit()
+exit()
 
 
