@@ -180,7 +180,7 @@ for r in rows:
 	print(' Updating ' + r[0])
 	xml = getwebcontent(r[1])
 	parsexml(xml, r[0], r[1])
-	cur.execute('UPDATE shelf SET last_update = CURDAT() WHERE journal IS r[0]')
+	cur.execute('UPDATE shelf SET last_update = CURDATE() WHERE journal = %s',(r[0],))
 cur.close()
 db.commit()
 exit()
