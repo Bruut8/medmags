@@ -3,26 +3,18 @@
 #
 
 #imports
-from lxml import etree, html
-#import xml.etree.ElementTree as et
-#from requests_html import HTMLSession
+from lxml import etree
 import urllib.request
 import re
 import MySQLdb
 
 #vars
-feeds = [
-	#{'name': 'Otology_Neurotology', 'feed': 'http://ovidsp.ovid.com/rss/journals/00129492/current.rss'}
-	{'name': 'Laryngoscope', 'feed': 'http://onlinelibrary.wiley.com/action/showFeed?jc=15314995&type=etoc&feed=rss'}
-]
 NAMESPACES = {
 	'rss': 'http://purl.org/rss/1.0/',
 	'rdf': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
 	'prism': 'http://prismlibrary.com',
 	'dc': 'http://purl.org/dc/elements/1.1/'
 }
-proxy = '' 
-
 
 # functions
 def getwebcontent(url):
@@ -122,46 +114,49 @@ def pmidtodb(pmidlist, dbname):
 	#print(xml)
 	xdoc = loadxml(xml)
 	for i in xdoc.xpath('//PubmedArticleSet/PubmedArticle'):
-		title = str(i.xpath('MedlineCitation/Article/ArticleTitle/text()')[0])
-		volume = int(i.xpath('MedlineCitation/Article/Journal/JournalIssue/Volume/text()')[0])
-		issue = str(i.xpath('MedlineCitation/Article/Journal/JournalIssue/Issue/text()')[0])
-		pubdate = str(i.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Year/text()')[0]) + '-' +  str(i.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Month/text()')[0]) + '-' + str(i.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Day/text()')[0])
-		pmid = str(i.xpath('PubmedData/ArticleIdList/ArticleId[@IdType="pubmed"]/text()')[0])
-		doi = str(i.xpath('PubmedData/ArticleIdList/ArticleId[@IdType="doi"]/text()')[0])
-		authors = []
-		for a in i.xpath('MedlineCitation/Article/AuthorList/Author'):
-			authors.append(str(a.xpath('Initials/text()')[0]) + ' ' + str(a.xpath('LastName/text()')[0]))
-		authors = ','.join(authors)
-		abstract = []
-		for a in i.xpath('MedlineCitation/Article/Abstract/AbstractText'):
-			abstract.append(str(a.xpath('text()')[0]))
-		abstract = '\n'.join(abstract)
-		pubtype = []
-		for a in i.xpath('MedlineCitation/Article/PublicationTypeList/PublicationType'):
-			pubtype.append(str(a.xpath('text()')[0]))
-		pubtype = ','.join(pubtype)
-		#print(name,volume,issue,pubdate,pubtype,authors,pmid,doi,abstract,sep='\n')
-		doired = getredirect('https://doi.org/' + doi)
-		if 'Insights.ovid.com' in doired:
-			#ovid weblink
-			an = re.search(r'an=(.*)', doired)
-			# pdflink = 'http://ovidsp.ovid.com/ovidweb.cgi?T=JS&CSC=Y&NEWS=N&PAGE=fulltext&AN=' + an.group(1) + '&LSLINK=80&D=ovft&CHANNEL=PubMed&PDF=y' 
-			# Radboud:
-			pdflink = 'http://ovidsp.tx.ovid.com.ru.idm.oclc.org/sp-3.31.1a/ovidweb.cgi?T=JS&CSC=Y&NEWS=N&PAGE=fulltext&AN=' + an.group(1) + '&LSLINK=80&D=ovft&CHANNEL=PubMed&PDF=y'
-		elif 'wiley.com' in doired:
-			#wiley weblink
-			pdflink = 'https://onlinelibrary-wiley-com.ru.idm.oclc.org/doi/epdf/' + doi
-		else:
-			pdflink = 0
-			print(' Geen PDF link kunne verkrijgen!')
-		print(' Adding ' + pmid + ' to database...')
-		#sql_cmd = 'INSERT INTO ' + dbname + 'VALUES(' + title + ',' + authors + ',' + pmid + ',' + doi + ',' + volume + ',' + issue + ',' + pubdate + ',' + pubtype + ',' + abstract + ',' + pdflink + ')'
 		try:
-			cur.execute('INSERT INTO ' + dbname + ' (title, authors, pmid, doi, volume, issue, pubdate, pubtype, abstract, pdflink) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',(title,authors,pmid,doi,volume,issue,pubdate,pubtype,abstract,pdflink))
-			print('  Succes!')
-		except MySQLdb.Error as e:
-			print(' Error: %d, %s' % (e.args[0],e.args[1]))
-			input('press to continue')
+			title = str(i.xpath('MedlineCitation/Article/ArticleTitle/text()')[0])
+			volume = int(i.xpath('MedlineCitation/Article/Journal/JournalIssue/Volume/text()')[0])
+			issue = str(i.xpath('MedlineCitation/Article/Journal/JournalIssue/Issue/text()')[0])
+			pubdate = str(i.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Year/text()')[0]) + '-' +  str(i.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Month/text()')[0]) + '-' + str(i.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Day/text()')[0])
+			pmid = str(i.xpath('PubmedData/ArticleIdList/ArticleId[@IdType="pubmed"]/text()')[0])
+			doi = str(i.xpath('PubmedData/ArticleIdList/ArticleId[@IdType="doi"]/text()')[0])
+			authors = []
+			for a in i.xpath('MedlineCitation/Article/AuthorList/Author'):
+				authors.append(str(a.xpath('Initials/text()')[0]) + ' ' + str(a.xpath('LastName/text()')[0]))
+			authors = ','.join(authors)
+			abstract = []
+			for a in i.xpath('MedlineCitation/Article/Abstract/AbstractText'):
+				abstract.append(str(a.xpath('text()')[0]))
+			abstract = '\n'.join(abstract)
+			pubtype = []
+			for a in i.xpath('MedlineCitation/Article/PublicationTypeList/PublicationType'):
+				pubtype.append(str(a.xpath('text()')[0]))
+			pubtype = ','.join(pubtype)
+			#print(name,volume,issue,pubdate,pubtype,authors,pmid,doi,abstract,sep='\n')
+			doired = getredirect('https://doi.org/' + doi)
+			if 'Insights.ovid.com' in doired:
+				#ovid weblink
+				an = re.search(r'an=(.*)', doired)
+				# pdflink = 'http://ovidsp.ovid.com/ovidweb.cgi?T=JS&CSC=Y&NEWS=N&PAGE=fulltext&AN=' + an.group(1) + '&LSLINK=80&D=ovft&CHANNEL=PubMed&PDF=y' 
+				# Radboud:
+				pdflink = 'http://ovidsp.tx.ovid.com.ru.idm.oclc.org/sp-3.31.1a/ovidweb.cgi?T=JS&CSC=Y&NEWS=N&PAGE=fulltext&AN=' + an.group(1) + '&LSLINK=80&D=ovft&CHANNEL=PubMed&PDF=y'
+			elif 'wiley.com' in doired:
+				#wiley weblink
+				pdflink = 'https://onlinelibrary-wiley-com.ru.idm.oclc.org/doi/epdf/' + doi
+			else:
+				pdflink = 0
+				print(' Geen PDF link kunne verkrijgen!')
+			print(' Adding ' + pmid + ' to database...')
+			#sql_cmd = 'INSERT INTO ' + dbname + 'VALUES(' + title + ',' + authors + ',' + pmid + ',' + doi + ',' + volume + ',' + issue + ',' + pubdate + ',' + pubtype + ',' + abstract + ',' + pdflink + ')'
+			try:
+				cur.execute('INSERT INTO ' + dbname + ' (title, authors, pmid, doi, volume, issue, pubdate, pubtype, abstract, pdflink) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',(title,authors,pmid,doi,volume,issue,pubdate,pubtype,abstract,pdflink))
+				print('  Succes!')
+			except MySQLdb.Error as e:
+				print(' Error: %d, %s' % (e.args[0],e.args[1]))
+				input('press to continue')
+		except IndexError:
+			pass
 	return
 
 
@@ -175,19 +170,21 @@ cur.execute('SET CHARACTER SET utf8;')
 cur.execute('SET character_set_connection=utf8;')
 print('  Succes!')
 
-
-
-# table
-# title, authors, pmid, doi, volume, issue, pubdate, pubtype, abstract, pdflink
-
-# start collecting
-
-for dict in feeds:
-	xml = getwebcontent(dict['feed'])
-	parsexml(xml, dict['name'], dict['feed'])
-
+# Check update dates
+print(' Check Magazine collection...')
+sql_cmd = 'CREATE TABLE IF NOT EXISTS shelf (journal VARCHAR(400), feed VARCHAR(500), last_update DATE)'
+cur.execute(sql_cmd)
+cur.execute('SELECT * FROM shelf WHERE last_update <> CURDATE() OR last_update IS NULL')
+rows = cur.fetchall()
+for r in rows:
+	print(' Updating ' + r[0])
+	xml = getwebcontent(r[1])
+	parsexml(xml, r[0], r[1])
+	cur.execute('UPDATE shelf SET last_update = CURDAT() WHERE journal IS r[0]')
 cur.close()
 db.commit()
 exit()
 
 
+# table
+# title, authors, pmid, doi, volume, issue, pubdate, pubtype, abstract, pdflink
