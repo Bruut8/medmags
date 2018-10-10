@@ -12,7 +12,7 @@ import MySQLdb
 
 #vars
 feeds = [
-	{'name': 'Otology Neurotology', 'feed': 'http://ovidsp.ovid.com/rss/journals/00129492/current.rss'}
+	{'name': 'Otology_Neurotology', 'feed': 'http://ovidsp.ovid.com/rss/journals/00129492/current.rss'}
 ]
 NAMESPACES = {
 	'rss': 'http://purl.org/rss/1.0/',
@@ -51,7 +51,13 @@ def cleanxml(s):
 	return s
 
 def parsexml(xml, name, feed):
-	cur.execute('CREATE TABLE IF NOT EXISTS %s (title VARCHAR(400), authors VARCHAR(500), pmid INT(8), doi VARCHAR(30), volume VARCHAR(4), issue VARCHAR(3), pubdate DATE, pubtype VARCHAR(500), abstract VARCHAR(3000), pdflink VARCHAR(500), weblink VARCHAR(500), (name))'
+	print(' Attempting to drop table for journal ' + name)
+	cur.execute('DROP TABLE IF EXISTS ' + name)
+	print('  Succes!')
+	print(' Attempting to create database for journal ' + name)
+	sql_cmd = 'CREATE TABLE IF NOT EXISTS ' + name + '(title VARCHAR(400), authors VARCHAR(500), pmid INT(8), doi VARCHAR(30), volume VARCHAR(4), issue VARCHAR(3), pubdate DATE, pubtype VARCHAR(500), abstract VARCHAR(3000), pdflink VARCHAR(500))'
+	cur.execute(sql_cmd)
+	print('  Succes!')
 	if 'ovidsp.ovid.com' in feed:
 		parseovid(xml, name)
 	return
@@ -96,7 +102,7 @@ def pmidtodb(pmidlist, dbname):
 	#print(xml)
 	xdoc = loadxml(xml)
 	for i in xdoc.xpath('//PubmedArticleSet/PubmedArticle'):
-		name = str(i.xpath('MedlineCitation/Article/ArticleTitle/text()')[0])
+		title = str(i.xpath('MedlineCitation/Article/ArticleTitle/text()')[0])
 		volume = int(i.xpath('MedlineCitation/Article/Journal/JournalIssue/Volume/text()')[0])
 		issue = str(i.xpath('MedlineCitation/Article/Journal/JournalIssue/Issue/text()')[0])
 		pubdate = str(i.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Year/text()')[0]) + '-' +  str(i.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Month/text()')[0]) + '-' + str(i.xpath('PubmedData/History/PubMedPubDate[@PubStatus="pubmed"]/Day/text()')[0])
@@ -122,18 +128,31 @@ def pmidtodb(pmidlist, dbname):
 			pdflink = 'http://ovidsp.ovid.com/ovidweb.cgi?T=JS&CSC=Y&NEWS=N&PAGE=fulltext&AN=' + an.group(1) + '&LSLINK=80&D=ovft&CHANNEL=PubMed&PDF=y' 
 		else:
 			pdflink = 0
-		print('Adding ' + pmid + ' to database...')
-		cur.execute('INSERT INTO %s VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s', (name, title, authors, pmid, doi, volume, issue, pubdate, pubtype, abstract, pdflink, weblink))
+		print(' Adding ' + pmid + ' to database...')
+		#sql_cmd = 'INSERT INTO ' + dbname + 'VALUES(' + title + ',' + authors + ',' + pmid + ',' + doi + ',' + volume + ',' + issue + ',' + pubdate + ',' + pubtype + ',' + abstract + ',' + pdflink + ')'
+		try:
+			cur.execute('INSERT INTO ' + dbname + ' (title, authors, pmid, doi, volume, issue, pubdate, pubtype, abstract, pdflink) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)',(title,authors,pmid,doi,volume,issue,pubdate,pubtype,abstract,pdflink))
+			print('  Succes!')
+		except MySQLdb.Error as e:
+			print(' Error: %d, %s' % (e.args[0],e.args[1]))
+			input('press to continue')
 	return
 
 
 # MySQL connection
-
+print(' Connecting to MySQL db...')
 db = MySQLdb.connect(user='pymm', passwd='pymmpassword', db='medmags')
+db.set_character_set('utf8')
 cur = db.cursor()
+cur.execute('SET NAMES utf8;')
+cur.execute('SET CHARACTER SET utf8;')
+cur.execute('SET character_set_connection=utf8;')
+print('  Succes!')
+
+
 
 # table
-# title, authors, pmid, doi, volume, issue, pubdate, pubtype, abstract, pdflink, weblink
+# title, authors, pmid, doi, volume, issue, pubdate, pubtype, abstract, pdflink
 
 # start collecting
 
