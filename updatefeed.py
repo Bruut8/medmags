@@ -12,7 +12,7 @@ import MySQLdb
 NAMESPACES = {
 	'rss': 'http://purl.org/rss/1.0/',
 	'rdf': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
-	'prism': 'http://prismlibrary.com',
+	'prism': 'http://purl.org/rss/1.0/modules/prism/',
 	'dc': 'http://purl.org/dc/elements/1.1/'
 }
 
@@ -50,6 +50,8 @@ def parsexml(xml, name, feed):
 		parseovid(xml, name)
 	elif 'wiley.com' in feed:
 		parsewiley(xml, name)
+	elif 'jamanetwork.com' in feed:
+		parsejama(xml, name)
 	return
 
 def resettable(name):
@@ -61,14 +63,7 @@ def resettable(name):
 	cur.execute(sql_cmd)
 	print('  Succes!')
 	
-def parsewiley(xml, name):
-	xdoc = loadxml(xml)
-	pmidlist = []
-	# Get vol and issue from xml
-	t = re.search('Volume\s+(\d+).*Issue\s+(\d+)',cleanxml(str(xdoc.xpath('//rdf:RDF/rss:item/rss:description/text()', namespaces=NAMESPACES)))) 
-	volume = t.group(1)
-	issue = t.group(2)
-	print(' XML version: Volume ' + volume + ' Issue ' + issue)
+def checkuptodate(name, xmlvolume, xmlissue):
 	# Get vol and issue from database
 	cur.execute('SELECT volume,issue FROM shelf WHERE journal = %s', (name,))
 	rows = cur.fetchall()
@@ -77,12 +72,62 @@ def parsewiley(xml, name):
 		issdb = str(r[1])
 		print(name + ' last updated to volume ' + voldb + ' issue ' + issdb)
 	# compare and if match then skip
-	if volume == voldb and issue == issdb:
+	if xmlvolume == voldb and xmlissue == issdb:
 		print(' Already up to date, skipping ' + name)
-		return	
+		return 1
+	else:
+		return 0
+
+def strip_ns_prefix(tree):
+    #xpath query for selecting all element nodes in namespace
+    query = "descendant-or-self::*[namespace-uri()!='']"
+    #for each element returned by the above xpath query...
+    for element in tree.xpath(query):
+        #replace element name with its local name
+        element.tag = etree.QName(element).localname
+    return tree		
+		
+def parsejama(xml, name):
+	xdoc = loadxml(xml)
+	pmidlist = []
+	# prism needed so remove namespaces
+	xdoc = strip_ns_prefix(xdoc)
+	# Get vol and issue from xml
+	volume = str(xdoc.xpath('//rss/channel/item/volume/text()')[0])
+	issue = str(xdoc.xpath('//rss/channel/item/number/text()')[0])
+	print(' XML version: Volume ' + volume + ' Issue ' + issue)
+	if checkuptodate(name, volume, issue) == 1:
+		return
+	# if not up-to-date then drop table
+	print(' Identified JAMA-type feed, pubmed doi search required..')
+	resettable(name)
+	for i in xdoc.xpath('//rss/channel/item'):
+		doi = cleanxml(str(i.xpath('doi/text()')[0]))
+		pmid = pmtermsearch(doi, 'doi')
+		if pmid == 0:
+			print('  Skipping entry..')
+		else:
+			pmidlist.append(pmid)
+	if len(pmidlist) > 0:
+		pmidtodb(pmidlist, name)
+		print(' Updating shelf...')
+		# Update shelf
+		cur.execute('UPDATE shelf SET volume = %s, issue = %s WHERE journal = %s',(volume, issue, name))
+	else:
+		print(' No PMID\'s found in entire feed. Feed correct?')
+	return
 	
-	# if not skipped then drop table
-	
+def parsewiley(xml, name):
+	xdoc = loadxml(xml)
+	pmidlist = []
+	# Get vol and issue from xml
+	t = re.search('Volume\s+(\d+).*Issue\s+(\d+)',cleanxml(str(xdoc.xpath('//rdf:RDF/rss:item/rss:description/text()', namespaces=NAMESPACES)))) 
+	volume = t.group(1)
+	issue = t.group(2)
+	print(' XML version: Volume ' + volume + ' Issue ' + issue)
+	if checkuptodate(name, volume, issue) == 1:
+		return
+	# if not up-to-date then drop table
 	print(' Identified Wiley-type feed, pubmed doi search required..')
 	resettable(name)
 	for i in xdoc.xpath('//rdf:RDF/rss:item', namespaces=NAMESPACES):
@@ -109,18 +154,8 @@ def parseovid(xml, name):
 	volume = t.group(1)
 	issue = t.group(2)
 	print(' XML version: Volume ' + volume + ' Issue ' + issue)
-	# Get vol and issue from database
-	cur.execute('SELECT volume,issue FROM shelf WHERE journal = %s', (name,))
-	rows = cur.fetchall()
-	for r in rows:
-		voldb = str(r[0])
-		issdb = str(r[1])
-		print(name + ' last updated to volume ' + voldb + ' issue ' + issdb)
-	# compare and if match then skip
-	if volume == voldb and issue == issdb:
-		print(' Already up to date, skipping ' + name)
+	if checkuptodate(name, volume, issue) == 1:
 		return	
-	
 	# if not skipped then drop table	
 	resettable(name)
 	print(' Identified OVID-type feed, pubmed title search required..')
@@ -202,9 +237,22 @@ def pmidtodb(pmidlist, dbname):
 				pdflink = 'https://onlinelibrary-wiley-com.ru.idm.oclc.org/doi/epdf/' + doi
 				#wiley weblink
 				weblink = 'https://onlinelibrary-wiley-com.ru.idm.oclc.org/doi/full/' + doi
+			elif 'jamanetwork' in doired:
+				#jama pdflink
+				jour = re.search(r'journals/(\w+)/article-abstract', doired)
+				id = re.search(r'article-abstract/(\d+)', doired)
+				redweb = str(getwebcontent(doired))
+				dau = re.search(r'data-article-url=\"(.*?)\"', redweb)
+				print(' Redirected to ' + doired)
+				print('  Found journal: ' + jour.group(1))
+				print('  Found article-id: ' + id.group(1))
+				print('  Found dau: ' + dau.group(1))
+				pdflink = 'https://jamanetwork-com.ru.idm.oclc.org' + dau.group(1)
+				weblink = 'https://jamanetwork-com.ru.idm.oclc.org/journals/' + jour.group(1) + '/fullarticle/' + id.group(1)
 			else:
 				pdflink = 0
-				print(' Geen PDF link kunnen verkrijgen!')
+				weblink = 0
+				print(' Geen PDF- of Weblink kunnen verkrijgen!')
 			print(' Adding ' + pmid + ' to database...')
 			#sql_cmd = 'INSERT INTO ' + dbname + 'VALUES(' + title + ',' + authors + ',' + pmid + ',' + doi + ',' + volume + ',' + issue + ',' + pubdate + ',' + pubtype + ',' + abstract + ',' + pdflink + ')'
 			try:
